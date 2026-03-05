@@ -1,0 +1,1169 @@
+const express = require('express');
+const router = express.Router();
+const axios = require('axios');
+const db = require('../db');
+
+// 🔍 Middleware pour capturer les données brutes
+router.use(express.json());
+router.use(express.urlencoded({ extended: true }));
+router.use(express.text({ type: '*/*' })); // Capture tout comme texte en dernier recours
+
+// Middleware de diagnostic qui affiche TOUT
+router.use((req, res, next) => {
+    console.log('\n🔍 [DIAGNOSTIC ROUTE] ==================');
+    console.log('📍 URL:', req.url);
+    console.log('📍 Méthode:', req.method);
+    console.log('📦 Body type:', typeof req.body);
+    console.log('📦 Body contenu:', req.body);
+    console.log('🔍 [DIAGNOSTIC ROUTE] ==================\n');
+    next();
+});
+
+// ==================== CONFIGURATION EBILLING ====================
+const EBILLING_USERNAME = process.env.EBILLING_USERNAME || 'smeby33';
+const EBILLING_SHARED_KEY = process.env.EBILLING_SHARED_KEY || '0d14ed02-33fc-496b-9e03-04a00563d270';
+const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
+const EB_CALLBACK_URL = process.env.EB_CALLBACK_URL || 'https://ph8jb63g3p.us-east-1.awsapprunner.com/transactions/ebilling/webhook'                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     || 'https://ph8jb63g3p.us-east-1.awsapprunner.com/transactions/ebilling/webhook';
+
+// ==================== CONFIGURATION SHAP PAYOUT ====================
+const SHAP_API_ID = process.env.SHAP_API_ID || 'd0d7c937896906c';
+const SHAP_API_SECRET = process.env.SHAP_API_SECRET || '3508c7-cc327b-281049-a1e3d4-64b2c9';
+const SHAP_BASE_URL = process.env.SHAP_BASE_URL || 'https://test.billing-easy.net/shap/api/v1/merchant';
+const SHAP_CALLBACK_URL = process.env.SHAP_CALLBACK_URL || 'https://ph8jb63g3p.us-east-1.awsapprunner.com/transactions/shap/webhook';
+
+// Variables globales pour le token SHAP (valide 2h)
+let shapAccessToken = null;
+let shapTokenExpiry = null;
+
+// ==================== AUTHENTIFICATION SHAP ====================
+async function getShapAccessToken() {
+    // Vérifier si le token est encore valide
+    if (shapAccessToken && shapTokenExpiry && Date.now() < shapTokenExpiry) {
+        console.log('🔐 [SHAP] Token existant encore valide');
+        console.log('🔐 [SHAP] Token (début):', shapAccessToken.substring(0, 30) + '...');
+        return shapAccessToken;
+    }
+
+    console.log('🔐 [SHAP] Génération d\'un nouveau token...');
+    console.log('🔐 [SHAP] URL Auth:', `${SHAP_BASE_URL}/auth`);
+    console.log('🔐 [SHAP] API_ID:', SHAP_API_ID);
+    console.log('🔐 [SHAP] API_SECRET:', SHAP_API_SECRET.substring(0, 10) + '...');
+    
+    try {
+        const response = await axios.post(`${SHAP_BASE_URL}/auth`, {
+            api_id: SHAP_API_ID,
+            api_secret: SHAP_API_SECRET
+        }, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        console.log('✅ [SHAP] Réponse auth complète:', JSON.stringify(response.data, null, 2));
+        
+        shapAccessToken = response.data.access_token;
+        shapTokenExpiry = Date.now() + (7200 * 1000); // 2 heures
+        
+        console.log('✅ [SHAP] Token extrait:', shapAccessToken ? shapAccessToken.substring(0, 30) + '...' : 'NULL');
+        console.log('✅ [SHAP] Token généré avec succès');
+        console.log('✅ [SHAP] Expiration dans 2 heures');
+        return shapAccessToken;
+    } catch (err) {
+        console.error('❌ [SHAP] Erreur authentification:', err.response?.data || err.message);
+        console.error('❌ [SHAP] Status:', err.response?.status);
+        console.error('❌ [SHAP] Headers:', err.response?.headers);
+        throw new Error('Impossible d\'obtenir le token SHAP');
+    }
+}
+
+
+
+// ➕ Créer une facture (Invoice)
+router.post('/createInvoice', async (req, res) => {
+    console.log('\n🆕 ================================');
+    console.log('📝 [POST /createInvoice] CRÉATION DE FACTURE EBILLING');
+    console.log('🆕 ================================');
+    
+    const { 
+        amount, 
+        external_reference, 
+        short_description, 
+        payer_msisdn, 
+        payer_email, 
+        payer_name,
+        reservation_id,
+        reservation_type
+    } = req.body;
+    
+    console.log('📦 [POST /createInvoice] Données reçues:');
+    console.log('   💰 Montant:', amount, 'FCFA');
+    console.log('   🔖 Référence externe:', external_reference);
+    console.log('   📋 Description:', short_description);
+    console.log('   📞 Téléphone payeur:', payer_msisdn);
+    console.log('   📧 Email payeur:', payer_email);
+    console.log('   👤 Nom payeur:', payer_name);
+    console.log('   🎫 ID Réservation:', reservation_id);
+    console.log('   📂 Type Réservation:', reservation_type);
+
+    // Période d'expiration par défaut
+    const expiry_period = '100';
+
+    if (!amount || !external_reference || !short_description || !payer_msisdn || !payer_email || !payer_name || !reservation_id || !reservation_type) {
+        console.error('❌ [POST /createInvoice] Paramètres manquants!');
+        return res.status(400).json({ 
+            error: 'amount, external_reference, short_description, payer_msisdn, payer_email, payer_name, reservation_id et reservation_type sont requis.' 
+        });
+    }
+
+    // 🔗 Configuration des URLs de redirection et notification
+    const return_url = `https://bantu-house-booking-pwa.vercel.app/account?payment=success&reservation_id=${reservation_id}&type=${reservation_type}`;
+    const notification_url = 'https://ph8jb63g3p.us-east-1.awsapprunner.com/transactions/updateFactureStatus';
+    
+    console.log('🔗 [POST /createInvoice] URLs configurées:');
+    console.log('   🔙 Return URL:', return_url);
+    console.log('   🔔 Notification URL:', notification_url);
+
+    const data = {
+        payer_msisdn,
+        payer_email,
+        payer_name,
+        amount,
+        external_reference,
+        short_description,
+        expiry_period,
+        return_url,
+        notification_url
+    };
+
+    const auth = Buffer.from(`${EBILLING_USERNAME}:${EBILLING_SHARED_KEY}`).toString('base64');
+    
+    console.log('🌐 [POST /createInvoice] Envoi vers Ebilling API...');
+    console.log('   📡 URL:', EBILLING_URL);
+    console.log('   🔐 Auth:', auth.substring(0, 20) + '...');
+
+    try {
+        const response = await axios.post(EBILLING_URL, data, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': `Basic ${auth}`
+            }
+        });
+        console.log('✅ [POST /createInvoice] Facture créée avec succès!');
+        console.log('📄 [POST /createInvoice] Réponse Ebilling:', JSON.stringify(response.data, null, 2));
+        
+        // Insertion dans la table factures (structure simplifiée)
+        if (response.data && response.data.e_bill && response.data.e_bill.bill_id) {
+            const facture = response.data.e_bill;
+            const external_reference = facture.external_reference;
+            const bill_id = facture.bill_id;
+            const statuspay = 0; // ou null si tu préfères
+            const created_at = facture.created_at ? facture.created_at.replace('T', ' ').substring(0, 19) : null;
+            
+            console.log('💾 [POST /createInvoice] Enregistrement en base de données...');
+            console.log('   🆔 Bill ID:', bill_id);
+            console.log('   🔖 Référence:', external_reference);
+            console.log('   💳 Statut paiement:', statuspay);
+            console.log('   📅 Date création:', created_at);
+            
+            await db.query(
+                `INSERT INTO factures (external_reference, bill_id, statuspay, created_at, reservation_id, reservation_type) VALUES (?, ?, ?, ?, ?, ?)`,
+                [external_reference, bill_id, statuspay, created_at, reservation_id, reservation_type]
+            );
+            
+            console.log('✅ [POST /createInvoice] Facture enregistrée en BDD!');
+            console.log('🆕 ================================\n');
+        }
+        res.status(201).json(response.data);
+    } catch (err) {
+        console.error('❌ [POST /createInvoice] Erreur Ebilling!');
+        console.error('📝 [POST /createInvoice] Message:', err.message);
+        console.error('📝 [POST /createInvoice] Détails:', err.response?.data);
+        console.log('🆕 ================================\n');
+        res.status(500).json({ error: 'Erreur lors de la création de la facture.', details: err.response?.data || err.message });
+    }
+});
+
+
+// 🔍 Récupérer le bill_id via l'external_reference dans la table factures
+router.get('/recupererfactureid/:external_reference', async (req, res) => {
+    const { external_reference } = req.params;
+    
+    console.log('🔍 [GET /recupererfactureid] Début de la requête');
+    console.log('📝 [GET /recupererfactureid] external_reference reçu:', external_reference);
+    console.log('📝 [GET /recupererfactureid] Type:', typeof external_reference);
+    
+    try {
+        console.log('🔎 [GET /recupererfactureid] Exécution de la requête SQL...');
+        console.log('📋 [GET /recupererfactureid] Query: SELECT bill_id FROM factures WHERE external_reference = ?');
+        console.log('📋 [GET /recupererfactureid] Params:', [external_reference]);
+        
+        const [rows] = await db.query('SELECT bill_id FROM factures WHERE external_reference = ?', [external_reference]);
+        
+        console.log('✅ [GET /recupererfactureid] Requête SQL exécutée avec succès');
+        console.log('📊 [GET /recupererfactureid] Nombre de lignes trouvées:', rows.length);
+        
+        if (rows.length > 0) {
+            console.log('✅ [GET /recupererfactureid] Facture trouvée!');
+            console.log('📄 [GET /recupererfactureid] bill_id:', rows[0].bill_id);
+            console.log('📄 [GET /recupererfactureid] Données complètes:', JSON.stringify(rows[0], null, 2));
+            res.json({ bill_id: rows[0].bill_id });
+        } else {
+            console.warn('⚠️ [GET /recupererfactureid] Aucune facture trouvée pour cette référence');
+            console.warn('📝 [GET /recupererfactureid] Référence recherchée:', external_reference);
+            res.status(404).json({ error: 'Aucune facture trouvée pour cette référence.' });
+        }
+    } catch (err) {
+        console.error('❌ [GET /recupererfactureid] Erreur lors de la récupération du bill_id');
+        console.error('📝 [GET /recupererfactureid] Message d\'erreur:', err.message);
+        console.error('📝 [GET /recupererfactureid] Stack:', err.stack);
+        console.error('📝 [GET /recupererfactureid] SQL State:', err.sqlState);
+        console.error('📝 [GET /recupererfactureid] SQL Message:', err.sqlMessage);
+        res.status(500).json({ error: 'Erreur lors de la récupération du bill_id.', details: err.message });
+    }
+});
+
+// � Webhook Ebilling - Reçoit les notifications automatiques de paiement
+router.post('/ebilling/webhook', async (req, res) => {
+    console.log('\n🔔 ================================');
+    console.log('🔔 [POST /ebilling/webhook] NOTIFICATION EBILLING REÇUE');
+    console.log('🔔 ================================');
+    console.log('📦 [POST /ebilling/webhook] Body complet:', JSON.stringify(req.body, null, 2));
+    console.log('⏰ [POST /ebilling/webhook] Timestamp:', new Date().toISOString());
+    
+    // ✅ Support des deux formats (ancien et nouveau) pour compatibilité
+    const bill_id = req.body.billingid || req.body.bill_id;
+    const external_reference = req.body.reference || req.body.external_reference;
+    const status = req.body.state || req.body.status;
+    const amount = req.body.amount;
+    const payment_method = req.body.paymentsystem || req.body.payment_method;
+    
+    console.log('📊 [POST /ebilling/webhook] Données extraites:');
+    console.log('   🆔 Bill ID:', bill_id, '(de:', req.body.billingid ? 'billingid' : 'bill_id', ')');
+    console.log('   🔖 Référence:', external_reference, '(de:', req.body.reference ? 'reference' : 'external_reference', ')');
+    console.log('   📍 STATUT:', status, '← CRITIQUE!', '(de:', req.body.state ? 'state' : 'status', ')');
+    console.log('   💰 Montant:', amount);
+    console.log('   💳 Méthode:', payment_method, '(de:', req.body.paymentsystem ? 'paymentsystem' : 'payment_method', ')');
+    
+    try {
+        // 1️⃣ Vérifier que la facture existe
+        console.log('🔍 [POST /ebilling/webhook] Vérification de la facture...');
+        const [factureInfo] = await db.query(
+            'SELECT reservation_id, reservation_type FROM factures WHERE bill_id = ? AND external_reference = ?',
+            [bill_id, external_reference]
+        );
+        
+        if (factureInfo.length === 0) {
+            console.warn('⚠️ [POST /ebilling/webhook] Facture non trouvée:', bill_id);
+            console.log('🔔 ================================\n');
+            return res.status(404).json({ error: 'Facture non trouvée.' });
+        }
+        
+        const { reservation_id, reservation_type } = factureInfo[0];
+        console.log('✅ [POST /ebilling/webhook] Facture trouvée:');
+        console.log('   🎫 Reservation ID:', reservation_id);
+        console.log('   📂 Type:', reservation_type);
+        
+        // 2️⃣ ANALYSE DU STATUT - CRITIQUE!
+        console.log('\n🔍 [POST /ebilling/webhook] === VÉRIFICATION DU STATUT ===');
+        console.log('   📍 Statut reçu:', `"${status}"`);
+        console.log('   ✅ Statuts acceptés pour confirmation:', ['paid', 'completed', 'success']);
+        console.log('   ❌ Statuts qui ne confirment PAS:', ['pending', 'processing', 'initiated', 'cancelled', 'failed']);
+        
+        if (status === 'paid' || status === 'completed' || status === 'success') {
+            console.log('✅✅✅ [POST /ebilling/webhook] STATUT VALIDE - Confirmation du paiement!');
+            console.log('🔄 [POST /ebilling/webhook] Début des mises à jour BDD...');
+            
+            // Mettre à jour la facture
+            await db.query(
+                   'UPDATE factures SET statuspay = 1 WHERE bill_id = ?',
+                [bill_id]
+            );
+            
+            // Mettre à jour la réservation
+            let reservationTable;
+            switch (reservation_type) {
+                case 'appartement':
+                    reservationTable = 'reservations';
+                    break;
+                case 'espace_ouvert':
+                    reservationTable = 'reservations_espacesOuverts';
+                    break;
+                case 'evenement':
+                    reservationTable = 'reservations_evenements';
+                    break;
+                default:
+                    console.warn('⚠️ [POST /ebilling/webhook] Type de réservation inconnu:', reservation_type);
+                    reservationTable = null;
+            }
+            
+            if (reservationTable) {
+                await db.query(
+                    `UPDATE ${reservationTable} SET statut = 'confirmee' WHERE id = ?`,
+                    [reservation_id]
+                );
+                console.log(`✅ [POST /ebilling/webhook] Réservation ${reservation_id} confirmée`);
+            }
+            
+            // TODO: Envoyer email de confirmation au client
+            // TODO: Créer code TTLock si nécessaire
+            
+            console.log('🎉 [POST /ebilling/webhook] PAIEMENT CONFIRMÉ ET RÉSERVATION MISE À JOUR!');
+            console.log('🔔 ================================\n');
+            res.status(200).json({ 
+                success: true, 
+                message: 'Paiement confirmé avec succès',
+                reservation_id 
+            });
+        } else {
+            console.log(`\n⚠️⚠️⚠️ [POST /ebilling/webhook] STATUT NON CONFIRMÉ!`);
+            console.log(`   📍 Statut reçu: "${status}"`);
+            console.log(`   ⏸️  ACTION: Aucune mise à jour effectuée`);
+            console.log(`   💡 RAISON: Le paiement n'est pas encore finalisé`);
+            console.log(`   ℹ️  Ebilling rappellera ce webhook quand le statut changera`);
+            console.log('🔔 ================================\n');
+            res.status(200).json({ success: true, message: 'Notification reçue', status_ignored: status });
+        }
+        
+    } catch (err) {
+        console.error('❌ [POST /ebilling/webhook] Erreur:', err);
+        res.status(500).json({ error: 'Erreur lors du traitement de la notification.' });
+    }
+});
+
+// 🔍 Vérifier le statut d'un paiement auprès d'Ebilling (API)
+async function verifyPaymentWithEbilling(billId) {
+    const auth = Buffer.from(`${EBILLING_USERNAME}:${EBILLING_SHARED_KEY}`).toString('base64');
+    
+    try {
+        console.log(`🔍 Vérification paiement Ebilling pour bill_id: ${billId}`);
+        const response = await axios.get(`${EBILLING_URL}/${billId}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': `Basic ${auth}`
+            }
+        });
+        
+        console.log('📥 Réponse Ebilling:', JSON.stringify(response.data, null, 2));
+        
+        return {
+            success: true,
+            is_paid: response.data.e_bill?.status === 'paid',
+            status: response.data.e_bill?.status,
+            data: response.data.e_bill
+        };
+    } catch (err) {
+        console.error('❌ Erreur vérification Ebilling:', err.response?.data || err.message);
+        return {
+            success: false,
+            error: err.response?.data || err.message
+        };
+    }
+}
+
+// ❌ ROUTE SUPPRIMÉE : POST /redirectToEbilling
+// Cette route faisait un POST vers le portail Ebilling, ce qui est incorrect selon la documentation.
+// La documentation Ebilling exige une redirection GET avec query parameters depuis le frontend :
+// https://test.billing-easy.net?invoice={bill_id}&redirect_url={callback_url}
+// Cette logique est maintenant gérée directement dans le frontend (PaymentProcess.tsx)
+
+// ✅ Mettre à jour le statut de paiement dans la table factures (avec vérification Ebilling)
+router.post('/updateFactureStatus', async (req, res) => {
+    try {
+        console.log('\n📝 ================================');
+        console.log('📝 [POST /updateFactureStatus] MISE À JOUR STATUT PAIEMENT');
+        console.log('📝 ================================');
+        console.log('📦 [POST /updateFactureStatus] Body:', JSON.stringify(req.body, null, 2));
+        console.log('📦 [POST /updateFactureStatus] Query:', JSON.stringify(req.query, null, 2));
+        console.log('📦 [POST /updateFactureStatus] Headers:', JSON.stringify(req.headers, null, 2));
+        console.log('📦 [POST /updateFactureStatus] Content-Type:', req.headers['content-type']);
+        
+        // 🔍 Ebilling peut envoyer les données de plusieurs façons:
+        // 1. Dans notification_params (objet imbriqué)
+        // 2. Directement dans le body
+        // 3. En query parameters
+        // 4. En form-urlencoded
+        const params = req.body.notification_params || req.body || req.query;
+        
+        console.log('📦 [POST /updateFactureStatus] Params choisis:', JSON.stringify(params, null, 2));
+        
+        // Correspondance des noms reçus du front/Ebilling
+        const { billingid, reference, external_reference, state, status } = params;
+        const bill_id = billingid;
+        const ext_ref = reference || external_reference;
+        const payment_status = state || status; // Ebilling utilise "state"
+        
+        console.log('📊 [POST /updateFactureStatus] Paramètres extraits:');
+        console.log('   🆔 Bill ID:', bill_id);
+        console.log('   🔖 Référence:', ext_ref);
+        console.log('   📍 Statut:', payment_status);
+        console.log('📝 ================================\n');
+        
+        console.log('🔍 [POST /updateFactureStatus] Vérification des paramètres...');
+        console.log('   typeof bill_id:', typeof bill_id, ', valeur:', bill_id);
+        console.log('   typeof ext_ref:', typeof ext_ref, ', valeur:', ext_ref);
+        
+        if (!bill_id || !ext_ref) {
+            console.error('❌ [POST /updateFactureStatus] Paramètres manquants!');
+            console.error('   Body disponible:', Object.keys(req.body));
+            console.error('   Query disponible:', Object.keys(req.query));
+            return res.status(400).json({ 
+                error: 'billingid et reference (ou external_reference) sont requis.',
+                received_body: req.body,
+                received_query: req.query
+            });
+        }
+        console.log('✅ [POST /updateFactureStatus] Paramètres OK');
+        
+        console.log('🔍 [POST /updateFactureStatus] Vérification du statut de paiement...');
+        console.log('   📍 Statut reçu:', payment_status);
+        console.log('   📍 Type du statut:', typeof payment_status);
+        
+        if (payment_status !== 'paid' && payment_status !== 'completed' && payment_status !== 'success') {
+            console.warn('⚠️ [POST /updateFactureStatus] Statut non payé:', payment_status);
+            return res.status(400).json({ 
+                error: 'Le paiement n\'est pas encore confirmé.',
+                status_received: payment_status,
+                message: 'Le statut doit être "paid", "completed" ou "success".'
+            });
+        }
+        
+        console.log('✅✅✅ [POST /updateFactureStatus] Statut PAID confirmé par Ebilling!');
+        
+        console.log('🔍 [POST /updateFactureStatus] Début du traitement SQL...');
+        console.log('🔍 [POST /updateFactureStatus] Vérification objet db:', typeof db, db ? '✅ OK' : '❌ NULL');
+        console.log('🔍 [POST /updateFactureStatus] Vérification db.query:', typeof db.query);
+        
+        // 1️⃣ RÉCUPÉRER LES INFORMATIONS DE LA FACTURE
+        console.log('📊 [POST /updateFactureStatus] Recherche de la facture en BDD...');
+        console.log('   🔎 Bill ID:', bill_id);
+        console.log('   🔎 Référence:', ext_ref);
+        
+        console.log('🔍 [POST /updateFactureStatus] AVANT db.query...');
+        
+        let factureInfo;
+        try {
+            factureInfo = await db.query(
+                'SELECT reservation_id, reservation_type FROM factures WHERE bill_id = ? AND external_reference = ?',
+                [bill_id, ext_ref]
+            );
+            console.log('✅ [POST /updateFactureStatus] APRÈS db.query - Succès!');
+        } catch (sqlErr) {
+            console.error('❌❌❌ [POST /updateFactureStatus] ERREUR SQL!');
+            console.error('   Message:', sqlErr.message);
+            console.error('   Code:', sqlErr.code);
+            console.error('   SQL State:', sqlErr.sqlState);
+            console.error('   SQL Message:', sqlErr.sqlMessage);
+            throw sqlErr;
+        }
+        
+        const [factureRows] = factureInfo;
+        console.log('📊 [POST /updateFactureStatus] Résultat requête:', factureRows.length, 'ligne(s)');
+        
+        if (factureRows.length === 0) {
+            console.error('❌ [POST /updateFactureStatus] Facture non trouvée en BDD');
+            return res.status(404).json({ error: 'Aucune facture trouvée pour ces identifiants.' });
+        }
+        
+        const { reservation_id, reservation_type } = factureRows[0];
+        console.log('📄 [POST /updateFactureStatus] Facture trouvée:');
+        console.log('   🎫 Reservation ID:', reservation_id);
+        console.log('   📂 Type:', reservation_type);
+        
+        // 2️⃣ METTRE À JOUR LE STATUT DE PAIEMENT DE LA FACTURE
+        console.log('🔄 [POST /updateFactureStatus] Mise à jour de la facture...');
+        const [result] = await db.query(
+            'UPDATE factures SET statuspay = 1 WHERE bill_id = ? AND external_reference = ?',
+            [bill_id, ext_ref]
+        );
+        
+        console.log('📊 [POST /updateFactureStatus] Lignes affectées:', result.affectedRows);
+        
+        // Déterminer la table de réservation
+        let reservationTable;
+        switch (reservation_type) {
+            case 'appartement':
+                reservationTable = 'reservations';
+                break;
+            case 'evenement':
+            case 'evenement_exterieur':
+            case 'privatisation_totale':
+                reservationTable = 'reservations_evenements';
+                break;
+            default:
+                console.log('⚠️ Type de réservation non reconnu:', reservation_type);
+                return res.json({ 
+                    success: true, 
+                    message: 'Statut de paiement mis à jour, mais type de réservation non reconnu.' 
+                });
+        }
+        
+        // 3️⃣ RÉCUPÉRER LA DESCRIPTION DU PAIEMENT
+        const shortdescription = params.shortdescription || '';
+        console.log('📋 [POST /updateFactureStatus] Description:', shortdescription);
+        
+        // 4️⃣ VÉRIFIER SI C'EST UN PAIEMENT DE CAUTION
+        const isCautionPayment = ext_ref.startsWith('CAUTION-') || shortdescription.toLowerCase().includes('caution pour');
+        console.log('🔍 [POST /updateFactureStatus] Type de paiement:', isCautionPayment ? '💰 CAUTION' : '📅 RÉSERVATION');
+        
+        // Déterminer le statut cible selon le type de réservation
+        const targetStatus = (reservation_type === 'evenement' || 
+                              reservation_type === 'evenement_exterieur' || 
+                              reservation_type === 'privatisation_totale') ? 'accepte' : 'confirmee';
+        console.log('🎯 [POST /updateFactureStatus] Statut cible:', targetStatus);
+        
+        if (isCautionPayment) {
+            // 🔹 CAS 1: PAIEMENT DE CAUTION - Mettre à jour uniquement cautionStatus
+            console.log('💰 [POST /updateFactureStatus] Traitement du paiement de CAUTION...');
+            const [cautionUpdate] = await db.query(
+                `UPDATE ${reservationTable} SET cautionStatus = 'versé' WHERE id = ?`,
+                [reservation_id]
+            );
+            
+            if (cautionUpdate.affectedRows > 0) {
+                console.log(`✅ [POST /updateFactureStatus] cautionStatus mis à jour à 'versé' pour la réservation ${reservation_id}`);
+                
+                res.json({ 
+                    success: true, 
+                    message: 'Paiement de caution confirmé avec succès.',
+                    reservation_id: reservation_id,
+                    reservation_type: reservation_type,
+                    payment_status: payment_status,
+                    payment_type: 'caution',
+                    caution_updated: true
+                });
+            } else {
+                console.log('⚠️ [POST /updateFactureStatus] Réservation non trouvée');
+                res.json({ 
+                    success: true, 
+                    message: 'Statut de paiement de caution mis à jour, mais réservation non trouvée.',
+                    reservation_id: reservation_id,
+                    reservation_type: reservation_type
+                });
+            }
+        } else {
+            // 🔹 CAS 2: PAIEMENT DE RÉSERVATION
+            console.log('📅 [POST /updateFactureStatus] Traitement du paiement de RÉSERVATION...');
+            
+            // Vérifier si la description indique un paiement avec caution incluse
+            const avecCautionInDescription = shortdescription.toLowerCase().includes('(avec caution)');
+            console.log('🔍 [POST /updateFactureStatus] Caution incluse dans description:', avecCautionInDescription);
+            
+            // 5️⃣ METTRE À JOUR LE STATUT DE LA RÉSERVATION
+            // Vérifier aussi le champ AvecCaution = 1 dans la BDD
+            console.log('🔍 [POST /updateFactureStatus] Vérification AvecCaution pour la réservation...');
+            const [reservationCheck] = await db.query(
+                `SELECT AvecCaution FROM ${reservationTable} WHERE id = ?`,
+                [reservation_id]
+            );
+            
+            let updateQuery;
+            let updateParams;
+            
+            // Mise à jour du cautionStatus si :
+            // - AvecCaution = 1 dans la BDD OU
+            // - Description contient "(avec caution)"
+            const shouldUpdateCaution = avecCautionInDescription || (reservationCheck.length > 0 && reservationCheck[0].AvecCaution === 1);
+            
+            if (shouldUpdateCaution) {
+                console.log('✅ [POST /updateFactureStatus] Caution détectée - Mise à jour de statut ET cautionStatus');
+                updateQuery = `UPDATE ${reservationTable} SET statut = ?, cautionStatus = 'versé' WHERE id = ?`;
+                updateParams = [targetStatus, reservation_id];
+            } else {
+                console.log('ℹ️ [POST /updateFactureStatus] Pas de caution - Mise à jour du statut uniquement');
+                updateQuery = `UPDATE ${reservationTable} SET statut = ? WHERE id = ?`;
+                updateParams = [targetStatus, reservation_id];
+            }
+            
+            const [reservationUpdate] = await db.query(updateQuery, updateParams);
+            
+            if (reservationUpdate.affectedRows > 0) {
+                console.log(`✅ [POST /updateFactureStatus] Statut de la réservation ${reservation_id} mis à jour à '${targetStatus}'`);
+                if (shouldUpdateCaution) {
+                    console.log(`✅ [POST /updateFactureStatus] cautionStatus mis à jour à 'versé'`);
+                }
+                
+                // TODO: Envoyer email de confirmation
+                // TODO: Créer code TTLock si type = appartement
+                
+                res.json({ 
+                    success: true, 
+                    message: 'Paiement confirmé et réservation mise à jour avec succès.',
+                    reservation_id: reservation_id,
+                    reservation_type: reservation_type,
+                    payment_status: payment_status,
+                    payment_type: 'reservation',
+                    status_updated: targetStatus,
+                    caution_updated: shouldUpdateCaution
+                });
+            } else {
+                console.log('⚠️ [POST /updateFactureStatus] Réservation non trouvée ou déjà confirmée');
+                res.json({ 
+                    success: true, 
+                    message: 'Statut de paiement mis à jour, mais réservation non trouvée.',
+                    reservation_id: reservation_id,
+                    reservation_type: reservation_type
+                });
+            }
+        }
+    } catch (err) {
+        console.error('❌❌❌ [POST /updateFactureStatus] ERREUR GLOBALE!');
+        console.error('📝 [POST /updateFactureStatus] Message:', err.message);
+        console.error('📝 [POST /updateFactureStatus] Stack:', err.stack);
+        console.error('📝 [POST /updateFactureStatus] Erreur complète:', err);
+        res.status(500).json({ 
+            error: 'Erreur lors de la mise à jour du statut de paiement.',
+            details: err.message,
+            stack: err.stack 
+        });
+    }
+});
+
+// 🔍 Vérifier si une réservation a été payée
+router.get('/checkPaymentStatus/:reservation_id', async (req, res) => {
+    console.log('\n🔍 ================================');
+    console.log('📝 [GET /checkPaymentStatus] VÉRIFICATION STATUT PAIEMENT');
+    console.log('🔍 ================================');
+    
+    const { reservation_id } = req.params;
+    
+    console.log('📊 [GET /checkPaymentStatus] Paramètres:');
+    console.log('   🎫 Reservation ID:', reservation_id);
+    
+    if (!reservation_id) {
+        console.error('❌ [GET /checkPaymentStatus] Reservation ID manquant!');
+        return res.status(400).json({ error: 'reservation_id est requis.' });
+    }
+    
+    try {
+        // Vérifier s'il existe une facture payée pour cette réservation
+        console.log('🔎 [GET /checkPaymentStatus] Recherche de la facture en BDD...');
+        const [factureCheck] = await db.query(
+            'SELECT bill_id, external_reference, statuspay, created_at, reservation_type FROM factures WHERE reservation_id = ?',
+            [reservation_id]
+        );
+        
+        console.log('📊 [GET /checkPaymentStatus] Résultats:', factureCheck.length, 'facture(s) trouvée(s)');
+        
+        if (factureCheck.length === 0) {
+            console.warn('⚠️ [GET /checkPaymentStatus] Aucune facture trouvée!');
+            console.log('🔍 ================================\n');
+            return res.json({
+                reservation_id: reservation_id,
+                is_paid: false,
+                payment_status: 'no_invoice',
+                message: 'Aucune facture trouvée pour cette réservation.'
+            });
+        }
+        
+        const facture = factureCheck[0];
+        const isPaid = facture.statuspay === 1;
+        
+        console.log('📄 [GET /checkPaymentStatus] Détails facture:');
+        console.log('   🆔 Bill ID:', facture.bill_id);
+        console.log('   🔖 Référence:', facture.external_reference);
+        console.log('   💳 Statut paiement:', facture.statuspay, isPaid ? '(✅ PAYÉ)' : '(⏳ EN ATTENTE)');
+        console.log('   📂 Type:', facture.reservation_type);
+        console.log('   📅 Créée le:', facture.created_at);
+        console.log('🔍 ================================\n');
+        
+        res.json({
+            reservation_id: reservation_id,
+            is_paid: isPaid,
+            payment_status: isPaid ? 'paid' : 'pending',
+            invoice_details: {
+                bill_id: facture.bill_id,
+                external_reference: facture.external_reference,
+                created_at: facture.created_at,
+                reservation_type: facture.reservation_type
+            },
+            message: isPaid ? 'Réservation payée avec succès.' : 'Paiement en attente.'
+        });
+        
+    } catch (err) {
+        console.error('❌ [GET /checkPaymentStatus] Erreur lors de la vérification!');
+        console.error('📝 [GET /checkPaymentStatus] Message:', err.message);
+        console.error('📝 [GET /checkPaymentStatus] Stack:', err.stack);
+        console.log('🔍 ================================\n');
+        res.status(500).json({ 
+            error: 'Erreur lors de la vérification du statut de paiement.',
+            reservation_id: reservation_id
+        });
+    }
+});
+
+// ==================== ROUTES SHAP PAYOUT (REMBOURSEMENT CAUTION) ====================
+
+// ==================== 🧪 ROUTE DE TEST - AUTHENTIFICATION SHAP ====================
+router.get('/shap/test-auth', async (req, res) => {
+    console.log('\n🧪 ================================');
+    console.log('🧪 [GET /shap/test-auth] TEST AUTHENTIFICATION SHAP');
+    console.log('🧪 ================================');
+    
+    try {
+        // Étape 1: Vider le cache de token
+        console.log('🔄 Réinitialisation du cache de token...');
+        shapAccessToken = null;
+        shapTokenExpiry = null;
+        
+        // Étape 2: Obtenir un nouveau token
+        console.log('🔐 Demande d\'un nouveau token...');
+        const token = await getShapAccessToken();
+        
+        console.log('✅ Token obtenu avec succès!');
+        console.log('📊 Informations du token:');
+        console.log('   - Longueur:', token ? token.length : 0, 'caractères');
+        console.log('   - Début:', token ? token.substring(0, 50) + '...' : 'NULL');
+        console.log('   - Expiration:', new Date(shapTokenExpiry).toISOString());
+        
+        // Étape 3: Tester l'endpoint /balance
+        console.log('\n💰 Test 1: Appel GET /balance...');
+        try {
+            const balanceResponse = await axios.get(`${SHAP_BASE_URL}/balance`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            console.log('✅ Balance - Succès!');
+            console.log('📊 Réponse:', JSON.stringify(balanceResponse.data, null, 2));
+        } catch (balanceErr) {
+            console.error('❌ Balance - Échec!');
+            console.error('📝 Erreur:', balanceErr.response?.data || balanceErr.message);
+            console.error('📝 Status:', balanceErr.response?.status);
+        }
+        
+        // Étape 4: Tester l'endpoint /payout avec des données minimales
+        console.log('\n💸 Test 2: Appel POST /payout (test structure)...');
+        try {
+            const testPayoutData = {
+                payment_system_name: 'airtelmoney',
+                payout: {
+                    payee_msisdn: '074528525',
+                    amount: 100, // Montant minimal pour test
+                    external_reference: `TEST-${Date.now()}`,
+                    payout_type: 'refund'
+                }
+            };
+            
+            console.log('📦 Payload de test:', JSON.stringify(testPayoutData, null, 2));
+            
+            const payoutResponse = await axios.post(`${SHAP_BASE_URL}/payout`, testPayoutData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            console.log('✅ Payout - Succès!');
+            console.log('📊 Réponse:', JSON.stringify(payoutResponse.data, null, 2));
+        } catch (payoutErr) {
+            console.error('❌ Payout - Échec!');
+            console.error('📝 Code erreur:', payoutErr.response?.data?.error_code);
+            console.error('📝 Erreur:', payoutErr.response?.data?.error);
+            console.error('📝 Description:', payoutErr.response?.data?.error_description);
+            console.error('📝 Status HTTP:', payoutErr.response?.status);
+            console.error('📝 Headers réponse:', JSON.stringify(payoutErr.response?.headers, null, 2));
+        }
+        
+        console.log('\n🧪 ================================');
+        console.log('🧪 FIN DES TESTS');
+        console.log('🧪 ================================\n');
+        
+        res.json({
+            success: true,
+            message: 'Tests d\'authentification SHAP terminés',
+            results: {
+                token_obtained: !!token,
+                token_length: token ? token.length : 0,
+                token_preview: token ? token.substring(0, 50) + '...' : null,
+                token_expiry: new Date(shapTokenExpiry).toISOString(),
+                endpoints_tested: ['/balance', '/payout'],
+                note: 'Consultez les logs du serveur pour les détails complets'
+            }
+        });
+        
+    } catch (err) {
+        console.error('❌ Erreur globale lors des tests!');
+        console.error('📝 Message:', err.message);
+        console.error('📝 Stack:', err.stack);
+        console.log('🧪 ================================\n');
+        
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors des tests',
+            details: err.message
+        });
+    }
+});
+
+// ==================== VÉRIFIER LE SOLDE SHAP ====================
+router.get('/shap/check-balance', async (req, res) => {
+    console.log('\n💰 ================================');
+    console.log('💰 [GET /shap/check-balance] VÉRIFICATION SOLDE SHAP');
+    console.log('💰 ================================');
+    
+    try {
+        const token = await getShapAccessToken();
+        
+        const response = await axios.get(`${SHAP_BASE_URL}/balance`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        console.log('✅ [SHAP] Solde récupéré:', JSON.stringify(response.data, null, 2));
+        console.log('💰 ================================\n');
+        res.json(response.data);
+    } catch (err) {
+        console.error('❌ [SHAP] Erreur récupération solde:', err.response?.data || err.message);
+        console.log('💰 ================================\n');
+        res.status(500).json({ error: 'Erreur lors de la vérification du solde', details: err.response?.data || err.message });
+    }
+});
+
+// ==================== REMBOURSER UNE CAUTION ====================
+router.post('/shap/refund-caution', async (req, res) => {
+    console.log('\n💸 ================================');
+    console.log('💸 [POST /shap/refund-caution] REMBOURSEMENT CAUTION');
+    console.log('💸 ================================');
+    
+    const { reservation_id, reservation_type, payment_system_name } = req.body;
+    
+    console.log('📦 Données reçues:');
+    console.log('   🎫 Réservation ID:', reservation_id);
+    console.log('   📂 Type:', reservation_type);
+    console.log('   💳 Système de paiement:', payment_system_name || 'airtelmoney (par défaut)');
+    
+    if (!reservation_id || !reservation_type) {
+        console.error('❌ Paramètres manquants!');
+        return res.status(400).json({ 
+            error: 'reservation_id et reservation_type sont requis' 
+        });
+    }
+    
+    try {
+        // 1️⃣ Récupérer les infos de la réservation
+        let reservationTable;
+        switch (reservation_type) {
+            case 'appartement':
+                reservationTable = 'reservations';
+                break;
+            case 'evenement':
+            case 'evenement_exterieur':
+            case 'privatisation_totale':
+                reservationTable = 'reservations_evenements';
+                break;
+            default:
+                return res.status(400).json({ error: 'Type de réservation invalide' });
+        }
+        
+        console.log('🔍 Recherche dans la table:', reservationTable);
+        
+        const [reservations] = await db.query(
+            `SELECT r.*, u.phone_number as payer_msisdn, u.email as payer_email, u.full_name as payer_name 
+             FROM ${reservationTable} r 
+             JOIN users u ON r.user_id = u.id 
+             WHERE r.id = ?`,
+            [reservation_id]
+        );
+        
+        if (reservations.length === 0) {
+            console.error('❌ Réservation non trouvée!');
+            return res.status(404).json({ error: 'Réservation non trouvée' });
+        }
+        
+        const reservation = reservations[0];
+        
+        console.log('✅ Réservation trouvée:');
+        console.log('   👤 Client:', reservation.payer_name);
+        console.log('   📞 Téléphone:', reservation.payer_msisdn);
+        console.log('   ✅ Statut caution:', reservation.cautionStatus);
+        console.log('   💰 Montant caution:', reservation.cautionMontant);
+        
+        // Vérifications
+        if (reservation.cautionStatus !== 'versé') {
+            console.error('❌ La caution n\'a pas été versée!');
+            return res.status(400).json({ 
+                error: 'La caution n\'a pas été versée pour cette réservation',
+                current_status: reservation.cautionStatus
+            });
+        }
+        
+        if (reservation.caution_refund_status === 'refunded') {
+            console.error('❌ La caution a déjà été remboursée!');
+            return res.status(400).json({ 
+                error: 'La caution a déjà été remboursée',
+                refund_status: reservation.caution_refund_status
+            });
+        }
+        
+        if (new Date(reservation.date_fin) > new Date()) {
+            console.error('❌ Le séjour n\'est pas encore terminé!');
+            return res.status(400).json({ 
+                error: 'Le séjour n\'est pas encore terminé',
+                date_fin: reservation.date_fin
+            });
+        }
+        
+        // 2️⃣ Générer une référence unique
+        const external_reference = `REFUND-CAUTION-${reservation_id}-${Date.now()}`;
+        
+        // 3️⃣ Récupérer le montant de la caution
+        const cautionAmount = reservation.cautionMontant;
+        
+        if (!cautionAmount || cautionAmount < 100) {
+            console.error('❌ Montant de caution invalide!');
+            return res.status(400).json({ 
+                error: 'Montant de caution invalide (minimum 100 FCFA)',
+                amount: cautionAmount
+            });
+        }
+        
+        console.log('💸 Préparation du payout:');
+        console.log('   👤 Bénéficiaire:', reservation.payer_name);
+        console.log('   📞 Téléphone:', reservation.payer_msisdn);
+        console.log('   💰 Montant:', cautionAmount, 'FCFA');
+        console.log('   🔖 Référence:', external_reference);
+        
+        // 4️⃣ Vérifier le solde SHAP avant de procéder
+        console.log('🔐 Obtention du token SHAP...');
+        
+        // 🔄 FORCER la régénération du token pour chaque payout (éviter les tokens expirés)
+        console.log('🔄 Forçage de la régénération du token pour garantir sa validité...');
+        shapAccessToken = null; // Invalider le cache
+        shapTokenExpiry = null;
+        
+        const token = await getShapAccessToken();
+        
+        // ⚠️ VÉRIFICATION DU SOLDE TEMPORAIREMENT DÉSACTIVÉE POUR LES TESTS
+        /*
+        console.log('💰 Vérification du solde disponible...');
+        console.log('💰 URL Balance:', `${SHAP_BASE_URL}/balance`);
+        console.log('💰 Token utilisé (début):', token ? token.substring(0, 30) + '...' : 'NULL/UNDEFINED');
+        console.log('💰 Authorization header:', `Bearer ${token ? token.substring(0, 30) + '...' : 'NULL'}`);
+        
+        const balanceResponse = await axios.get(`${SHAP_BASE_URL}/balance`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const availableBalance = balanceResponse.data.balance || balanceResponse.data.available_balance || 0;
+        console.log('💰 Solde disponible:', availableBalance, 'FCFA');
+        console.log('💰 Montant requis:', cautionAmount, 'FCFA');
+        
+        if (availableBalance < cautionAmount) {
+            console.error('❌ Solde insuffisant!');
+            console.error(`   💰 Disponible: ${availableBalance} FCFA`);
+            console.error(`   💰 Requis: ${cautionAmount} FCFA`);
+            console.error(`   💰 Manquant: ${cautionAmount - availableBalance} FCFA`);
+            return res.status(400).json({ 
+                error: 'Solde SHAP insuffisant pour effectuer le remboursement',
+                available_balance: availableBalance,
+                required_amount: cautionAmount,
+                missing_amount: cautionAmount - availableBalance
+            });
+        }
+        
+        console.log('✅ Solde suffisant pour le remboursement');
+        */
+        console.log('⚠️ [MODE TEST] Vérification du solde désactivée');
+        
+        // 5️⃣ Appeler l'API SHAP Payout
+        
+        const payoutData = {
+            payment_system_name: payment_system_name || 'airtelmoney',
+            payout: {
+                payee_msisdn: reservation.payer_msisdn,
+                amount: cautionAmount,
+                external_reference: external_reference,
+                payout_type: 'refund'
+            }
+        };
+        
+        console.log('🌐 Envoi de la requête payout vers SHAP...');
+        console.log('📦 Payload:', JSON.stringify(payoutData, null, 2));
+        
+        const response = await axios.post(`${SHAP_BASE_URL}/payout`, payoutData, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        console.log('✅ Payout créé avec succès!');
+        console.log('📄 Réponse SHAP:', JSON.stringify(response.data, null, 2));
+        
+        // 5️⃣ Enregistrer le payout en BDD
+        console.log('💾 Enregistrement du payout en BDD...');
+        await db.query(
+            `INSERT INTO payouts (reservation_id, reservation_type, external_reference, amount, payee_msisdn, status, created_at) 
+             VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
+            [reservation_id, reservation_type, external_reference, cautionAmount, reservation.payer_msisdn]
+        );
+        
+        // 6️⃣ Mettre à jour le statut de remboursement
+        console.log('🔄 Mise à jour du statut de remboursement...');
+        await db.query(
+            `UPDATE ${reservationTable} SET caution_refund_status = 'pending' WHERE id = ?`,
+            [reservation_id]
+        );
+        
+        console.log('✅✅✅ Remboursement de caution initié avec succès!');
+        console.log('💸 ================================\n');
+        
+        res.status(201).json({
+            success: true,
+            message: 'Remboursement de caution initié avec succès',
+            payout: response.data,
+            external_reference,
+            amount: cautionAmount,
+            beneficiary: {
+                name: reservation.payer_name,
+                phone: reservation.payer_msisdn
+            }
+        });
+        
+    } catch (err) {
+        console.error('❌ Erreur lors du remboursement:', err.response?.data || err.message);
+        console.error('📝 Stack:', err.stack);
+        console.log('💸 ================================\n');
+        res.status(500).json({ 
+            error: 'Erreur lors du remboursement de la caution',
+            details: err.response?.data || err.message 
+        });
+    }
+});
+
+// ==================== WEBHOOK SHAP (CALLBACK) ====================
+router.post('/shap/webhook', async (req, res) => {
+    console.log('\n🔔 ================================');
+    console.log('🔔 [POST /shap/webhook] CALLBACK SHAP REÇU');
+    console.log('🔔 ================================');
+    console.log('📦 Body complet:', JSON.stringify(req.body, null, 2));
+    console.log('📦 Headers:', JSON.stringify(req.headers, null, 2));
+    
+    const { external_reference, status, error_message } = req.body;
+    
+    if (!external_reference) {
+        console.error('❌ external_reference manquant!');
+        return res.status(400).json({ error: 'external_reference manquant' });
+    }
+    
+    try {
+        // 1️⃣ Récupérer les infos du payout
+        console.log('🔍 Recherche du payout:', external_reference);
+        const [payouts] = await db.query(
+            'SELECT * FROM payouts WHERE external_reference = ?',
+            [external_reference]
+        );
+        
+        if (payouts.length === 0) {
+            console.warn('⚠️ Payout non trouvé:', external_reference);
+            return res.status(404).json({ error: 'Payout non trouvé' });
+        }
+        
+        const payout = payouts[0];
+        const { reservation_id, reservation_type } = payout;
+        
+        console.log('✅ Payout trouvé:');
+        console.log('   🆔 Payout ID:', payout.id);
+        console.log('   🎫 Réservation:', reservation_id);
+        console.log('   📂 Type:', reservation_type);
+        console.log('   📍 Statut reçu:', status);
+        
+        // 2️⃣ Déterminer la table de réservation
+        let reservationTable;
+        switch (reservation_type) {
+            case 'appartement':
+                reservationTable = 'reservations';
+                break;
+            default:
+                reservationTable = 'reservations_evenements';
+        }
+        
+        // 3️⃣ Mettre à jour selon le statut
+        if (status === 'success' || status === 'completed') {
+            console.log('✅✅✅ REMBOURSEMENT RÉUSSI!');
+            
+            // Mettre à jour le payout
+            await db.query(
+                'UPDATE payouts SET status = "completed", completed_at = NOW() WHERE id = ?',
+                [payout.id]
+            );
+            
+            // Mettre à jour la réservation
+            await db.query(
+                `UPDATE ${reservationTable} SET caution_refund_status = 'refunded' WHERE id = ?`,
+                [reservation_id]
+            );
+            
+            console.log('📧 TODO: Envoyer email de confirmation au client');
+            // TODO: Implémenter l'envoi d'email de confirmation
+            
+            console.log('🎉 Caution remboursée avec succès!');
+            
+        } else if (status === 'failed' || status === 'error') {
+            console.log('❌ REMBOURSEMENT ÉCHOUÉ!');
+            console.log('📝 Message d\'erreur:', error_message);
+            
+            await db.query(
+                'UPDATE payouts SET status = "failed", error_message = ? WHERE id = ?',
+                [error_message || 'Erreur inconnue', payout.id]
+            );
+            
+            await db.query(
+                `UPDATE ${reservationTable} SET caution_refund_status = 'failed' WHERE id = ?`,
+                [reservation_id]
+            );
+            
+            console.log('📧 TODO: Notifier l\'admin pour intervention manuelle');
+            // TODO: Notifier l'admin
+        } else {
+            console.log('⏳ Statut en attente:', status);
+        }
+        
+        console.log('🔔 ================================\n');
+        res.status(200).json({ success: true, message: 'Callback traité avec succès' });
+        
+    } catch (err) {
+        console.error('❌ Erreur traitement webhook:', err);
+        console.error('📝 Stack:', err.stack);
+        console.log('🔔 ================================\n');
+        res.status(500).json({ error: 'Erreur traitement callback' });
+    }
+});
+
+// ==================== CONSULTER L'ÉTAT D'UN REMBOURSEMENT ====================
+router.get('/caution-refunds/:reservation_id', async (req, res) => {
+    console.log('\n📊 ================================');
+    console.log('📊 [GET /caution-refunds/:reservation_id] CONSULTATION REMBOURSEMENTS');
+    console.log('📊 ================================');
+    
+    const { reservation_id } = req.params;
+    console.log('🎫 Réservation ID:', reservation_id);
+    
+    try {
+        const [payouts] = await db.query(
+            'SELECT * FROM payouts WHERE reservation_id = ? ORDER BY created_at DESC',
+            [reservation_id]
+        );
+        
+        console.log('✅', payouts.length, 'remboursement(s) trouvé(s)');
+        console.log('📊 ================================\n');
+        
+        res.json({
+            reservation_id,
+            refunds_count: payouts.length,
+            refunds: payouts
+        });
+    } catch (err) {
+        console.error('❌ Erreur récupération remboursements:', err);
+        console.log('📊 ================================\n');
+        res.status(500).json({ error: 'Erreur lors de la récupération' });
+    }
+});
+
+module.exports = router;

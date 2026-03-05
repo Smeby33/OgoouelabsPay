@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎫 Rotary Club - Achat de Billets</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .events-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .event-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .event-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+        
+        .event-card.selected {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .event-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .event-info {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .categories {
+            display: grid;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .category-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .category-card:hover {
+            border-color: #667eea;
+        }
+        
+        .category-card.selected {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .category-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .category-price {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.3s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+        
+        .alert-success {
+            background: #e8f5e9;
+            color: #388e3c;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .alert-error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .total-section {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .total-row.final {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+            padding-top: 10px;
+            border-top: 2px solid #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎫 Rotary Club</h1>
+            <p>Système de réservation de billets</p>
+        </div>
+        
+        <div class="content">
+            <!-- Section: Sélection événement -->
+            <div class="section" id="events-section">
+                <h2>1️⃣ Choisissez votre événement</h2>
+                <div id="events-list" class="events-list">
+                    <div class="loader"></div>
+                </div>
+            </div>
+            
+            <!-- Section: Sélection catégorie -->
+            <div class="section hidden" id="categories-section">
+                <h2>2️⃣ Choisissez votre catégorie</h2>
+                <div id="categories-list" class="categories"></div>
+            </div>
+            
+            <!-- Section: Formulaire -->
+            <div class="section hidden" id="form-section">
+                <h2>3️⃣ Vos informations</h2>
+                
+                <div class="form-group">
+                    <label for="prenom">Prénom *</label>
+                    <input type="text" id="prenom" required placeholder="Jean">
+                </div>
+                
+                <div class="form-group">
+                    <label for="nom">Nom *</label>
+                    <input type="text" id="nom" required placeholder="Dupont">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" required placeholder="jean.dupont@example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="telephone">Téléphone *</label>
+                    <input type="tel" id="telephone" required placeholder="+22890123456">
+                </div>
+                
+                <div class="form-group">
+                    <label for="quantite">Nombre de billets *</label>
+                    <input type="number" id="quantite" min="1" value="1" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="code_promo">Code promo (optionnel)</label>
+                    <input type="text" id="code_promo" placeholder="ROTARY2026">
+                </div>
+                
+                <div class="form-group">
+                    <label for="notes">Notes / Besoins spéciaux (optionnel)</label>
+                    <textarea id="notes" rows="3" placeholder="Allergies, besoins d'accessibilité, etc."></textarea>
+                </div>
+                
+                <!-- Total -->
+                <div class="total-section" id="total-section">
+                    <div class="total-row">
+                        <span>Prix unitaire:</span>
+                        <span id="prix-unitaire">0 FCFA</span>
+                    </div>
+                    <div class="total-row">
+                        <span>Quantité:</span>
+                        <span id="quantite-display">1</span>
+                    </div>
+                    <div class="total-row final">
+                        <span>Total:</span>
+                        <span id="prix-total">0 FCFA</span>
+                    </div>
+                </div>
+                
+                <button class="btn" id="submit-btn">
+                    💳 Procéder au paiement
+                </button>
+            </div>
+            
+            <!-- Messages -->
+            <div id="message-area"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+        let selectedEvent = null;
+        let selectedCategory = null;
+        
+        // Charger les événements au démarrage
+        async function loadEvents() {
+            try {
+                const response = await fetch(`${API_URL}/rotary/events`);
+                const data = await response.json();
+                
+                if (data.success && data.events.length > 0) {
+                    displayEvents(data.events);
+                } else {
+                    showMessage('Aucun événement disponible pour le moment', 'info');
+                }
+            } catch (error) {
+                showMessage('Erreur de chargement des événements. Vérifiez que le serveur est démarré.', 'error');
+                console.error(error);
+            }
+        }
+        
+        // Afficher les événements
+        function displayEvents(events) {
+            const container = document.getElementById('events-list');
+            container.innerHTML = events.map(event => `
+                <div class="event-card" onclick="selectEvent('${event.id}')">
+                    <div class="event-title">🎪 ${event.titre}</div>
+                    <div class="event-info">📅 ${new Date(event.date_evenement).toLocaleDateString('fr-FR', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}</div>
+                    <div class="event-info">📍 ${event.lieu || 'Lieu à confirmer'}</div>
+                    <div class="event-info">👥 ${event.places_vendues || 0} / ${event.capacite_max || '∞'} places vendues</div>
+                </div>
+            `).join('');
+        }
+        
+        // Sélectionner un événement
+        async function selectEvent(eventId) {
+            try {
+                const response = await fetch(`${API_URL}/rotary/events/${eventId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    selectedEvent = data.event;
+                    displayCategories(data.categories);
+                    document.getElementById('categories-section').classList.remove('hidden');
+                    
+                    // Highlight sélection
+                    document.querySelectorAll('.event-card').forEach(card => {
+                        card.classList.remove('selected');
+                    });
+                    event.target.closest('.event-card').classList.add('selected');
+                }
+            } catch (error) {
+                showMessage('Erreur de chargement des catégories', 'error');
+                console.error(error);
+            }
+        }
+        
+        // Afficher les catégories
+        function displayCategories(categories) {
+            const container = document.getElementById('categories-list');
+            container.innerHTML = categories.map(cat => `
+                <div class="category-card" onclick="selectCategory('${cat.id}', ${cat.prix_unitaire})">
+                    <div>
+                        <div class="category-name">${cat.nom_categorie}</div>
+                        <div style="color: #666; font-size: 0.9em;">${cat.description || ''}</div>
+                        <div style="color: #666; font-size: 0.9em;">
+                            ${cat.places_restantes !== null ? `🎫 ${cat.places_restantes} places restantes` : '🎫 Places disponibles'}
+                        </div>
+                    </div>
+                    <div class="category-price">${cat.prix_unitaire.toLocaleString()} FCFA</div>
+                </div>
+            `).join('');
+        }
+        
+        // Sélectionner une catégorie
+        function selectCategory(categoryId, prix) {
+            selectedCategory = { id: categoryId, prix: prix };
+            document.getElementById('form-section').classList.remove('hidden');
+            document.getElementById('prix-unitaire').textContent = `${prix.toLocaleString()} FCFA`;
+            updateTotal();
+            
+            // Highlight sélection
+            document.querySelectorAll('.category-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.category-card').classList.add('selected');
+        }
+        
+        // Mettre à jour le total
+        function updateTotal() {
+            if (!selectedCategory) return;
+            
+            const quantite = parseInt(document.getElementById('quantite').value) || 1;
+            const total = selectedCategory.prix * quantite;
+            
+            document.getElementById('quantite-display').textContent = quantite;
+            document.getElementById('prix-total').textContent = `${total.toLocaleString()} FCFA`;
+        }
+        
+        // Soumettre le formulaire
+        async function submitForm() {
+            if (!selectedEvent || !selectedCategory) {
+                showMessage('Veuillez sélectionner un événement et une catégorie', 'error');
+                return;
+            }
+            
+            const formData = {
+                evenement_id: selectedEvent.id,
+                categorie_id: selectedCategory.id,
+                prenom: document.getElementById('prenom').value,
+                nom: document.getElementById('nom').value,
+                email: document.getElementById('email').value,
+                telephone: document.getElementById('telephone').value,
+                quantite: parseInt(document.getElementById('quantite').value),
+                code_promo: document.getElementById('code_promo').value || null,
+                notes_participant: document.getElementById('notes').value || null
+            };
+            
+            // Validation
+            if (!formData.prenom || !formData.nom || !formData.email || !formData.telephone) {
+                showMessage('Veuillez remplir tous les champs obligatoires', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Création du billet...';
+            
+            try {
+                const response = await fetch(`${API_URL}/rotary/tickets/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`✅ Billet créé ! Référence: ${data.data.reference_billet}`, 'success');
+                    
+                    // Sauvegarder la référence
+                    localStorage.setItem('current_ticket_ref', data.data.reference_billet);
+                    
+                    // Rediriger vers la page de paiement après 2 secondes
+                    setTimeout(() => {
+                        window.location.href = data.data.payment_url;
+                    }, 2000);
+                } else {
+                    showMessage(`❌ Erreur: ${data.error}`, 'error');
+                    btn.disabled = false;
+                    btn.textContent = '💳 Procéder au paiement';
+                }
+            } catch (error) {
+                showMessage('❌ Erreur de connexion au serveur', 'error');
+                console.error(error);
+                btn.disabled = false;
+                btn.textContent = '💳 Procéder au paiement';
+            }
+        }
+        
+        // Afficher un message
+        function showMessage(text, type) {
+            const area = document.getElementById('message-area');
+            area.innerHTML = `<div class="alert alert-${type}">${text}</div>`;
+            
+            // Auto-hide info messages
+            if (type === 'info') {
+                setTimeout(() => area.innerHTML = '', 5000);
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('quantite').addEventListener('input', updateTotal);
+        document.getElementById('submit-btn').addEventListener('click', submitForm);
+        
+        // Démarrage
+        loadEvents();
+    </script>
+</body>
+</html>
