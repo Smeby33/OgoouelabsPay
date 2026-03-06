@@ -21,13 +21,13 @@ router.use((req, res, next) => {
 });
 
 //==================== CONFIGURATION EBILLING ====================
-const EBILLING_USERNAME = process.env.EBILLING_USERNAME || 'ProGraphiquePub';
-const EBILLING_SHARED_KEY = process.env.EBILLING_SHARED_KEY || 'af8ccc1a-5e65-48f1-b5cf-5bfb457e4d2d';
-const EBILLING_URL = 'https://stg.billing-easy.com/api/v1/merchant/e_bills';
-// const EBILLING_USERNAME ='afup';
-// const EBILLING_SHARED_KEY ='b3b8814e-4639-46a1-97c3-bf37401dc54b';
-// const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
-const EB_CALLBACK_URL = process.env.EB_CALLBACK_URL || 'https://fwwm7ch7se.us-east-1.awsapprunner.com/rotary/webhook';
+// const EBILLING_USERNAME = process.env.EBILLING_USERNAME || 'ProGraphiquePub';
+// const EBILLING_SHARED_KEY = process.env.EBILLING_SHARED_KEY || 'af8ccc1a-5e65-48f1-b5cf-5bfb457e4d2d';
+// const EBILLING_URL = 'https://stg.billing-easy.com/api/v1/merchant/e_bills';
+const EBILLING_USERNAME ='afup';
+const EBILLING_SHARED_KEY ='b3b8814e-4639-46a1-97c3-bf37401dc54b';
+const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
+const EB_CALLBACK_URL = process.env.EB_CALLBACK_URL || 'https://spy86grsmp.us-east-1.awsapprunner.com/rotary/webhook';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://rotary-port-gentil-65th-anniversary.vercel.app';
 
 // Configuration email
