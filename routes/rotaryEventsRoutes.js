@@ -79,6 +79,8 @@ async function generateQRCodeBase64(data) {
 async function sendAdminNotification(type, billetData, eventData) {
     try {
         const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+        const adminEmail2 = process.env.ADMIN_EMAIL1;
+        const adminEmails = adminEmail2 ? `${adminEmail}, ${adminEmail2}` : adminEmail;
         
         let subject = '';
         let message = '';
@@ -157,13 +159,13 @@ async function sendAdminNotification(type, billetData, eventData) {
         
         const mailOptions = {
             from: process.env.EMAIL_USER,
-            to: adminEmail,
+            to: adminEmails,
             subject: subject,
             html: message
         };
         
         await transporter.sendMail(mailOptions);
-        console.log(`✅ Notification admin envoyée (${type}) à:`, adminEmail);
+        console.log(`✅ Notification admin envoyée (${type}) à:`, adminEmails);
         return true;
     } catch (err) {
         console.error('❌ Erreur envoi notification admin:', err);
