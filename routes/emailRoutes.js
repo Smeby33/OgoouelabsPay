@@ -25,7 +25,7 @@ function escapeHtml(value) {
 }
 
 function buildSubmissionReceivedEmail(payload) {
-  const firstName = asString(payload.studentFirstName, 'Etudiant');
+  const firstName = asString(payload.studentFirstName, 'Étudiant');
   const submissionId = asString(payload.submissionId);
   const submissionTitle = asString(payload.submissionTitle);
   const customMessage = asString(
@@ -43,7 +43,7 @@ function buildSubmissionReceivedEmail(payload) {
     `ID: ${submissionId}`,
     '',
     'Cordialement,',
-    'Equipe Chaina Smart'
+    'Équipe Chaina Smart'
   ].join('\n');
 
   const html = `
@@ -55,7 +55,7 @@ function buildSubmissionReceivedEmail(payload) {
         <p style="margin:0 0 6px 0;"><strong>Soumission:</strong> ${escapeHtml(submissionTitle)}</p>
         <p style="margin:0;"><strong>ID:</strong> ${escapeHtml(submissionId)}</p>
       </div>
-      <p style="margin-top:18px;">Cordialement,<br/>Equipe Chaina Smart</p>
+      <p style="margin-top:18px;">Cordialement,<br/>Équipe Chaina Smart</p>
     </div>
   `;
 
@@ -63,7 +63,7 @@ function buildSubmissionReceivedEmail(payload) {
 }
 
 function buildDocumentsReadyEmail(payload) {
-  const firstName = asString(payload.studentFirstName, 'Etudiant');
+  const firstName = asString(payload.studentFirstName, 'Étudiant');
   const submissionId = asString(payload.submissionId);
   const submissionTitle = asString(payload.submissionTitle);
   const customMessage = asString(
@@ -90,7 +90,7 @@ function buildDocumentsReadyEmail(payload) {
     labelsText,
     '',
     'Cordialement,',
-    'Equipe Chaina Smart'
+    'Équipe Chaina Smart'
   ].join('\n');
 
   const html = `
@@ -104,7 +104,7 @@ function buildDocumentsReadyEmail(payload) {
       </div>
       <p style="margin:0 0 6px 0;"><strong>Livrables:</strong></p>
       <ul style="margin:0 0 14px 20px;padding:0;">${labelsHtml}</ul>
-      <p style="margin-top:18px;">Cordialement,<br/>Equipe Chaina Smart</p>
+      <p style="margin-top:18px;">Cordialement,<br/>Équipe Chaina Smart</p>
     </div>
   `;
 

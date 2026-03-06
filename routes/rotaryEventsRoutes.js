@@ -91,7 +91,7 @@ async function sendAdminNotification(type, billetData, eventData) {
                 <div style="font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5;">
                     <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px;">
                         <h2 style="color: #01579B;">💰 Nouveau Paiement Confirmé</h2>
-                        <p>Un client vient de payer son billet :</p>
+                        <p>Un client vient de payer:</p>
                         
                         <div style="background: #E3F2FD; padding: 20px; border-radius: 8px; margin: 20px 0;">
                             <p><strong>👤 Client :</strong> ${billetData.prenom} ${billetData.nom}</p>
@@ -183,7 +183,7 @@ async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: billetData.email,
-            subject: `✅ Votre billet pour ${eventData.titre}`,
+            subject: `✅ Votre reçu pour ${eventData.titre}`,
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -206,7 +206,7 @@ async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
                     <div class="container">
                         <div class="header">
                             <h1>🎉 Paiement Confirmé !</h1>
-                            <p>Votre billet est prêt</p>
+                            <p>Votre reçu est prêt</p>
                         </div>
                         
                         <div class="content">
@@ -287,13 +287,13 @@ async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
                             
                             <p style="margin-top: 20px;">
                                 Cordialement,<br/>
-                                <strong>L'équipe ${eventData.organisateur_nom || 'Rotary Club'}</strong>
+                                <strong>L'équipe ${eventData.organisateur_nom || 'Problems Solver'}</strong>
                             </p>
                         </div>
                         
                         <div class="footer">
                             <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-                            <p>© ${new Date().getFullYear()} Rotary Club - Tous droits réservés</p>
+                            <p>© ${new Date().getFullYear()} Problems Solver - Tous droits réservés</p>
                         </div>
                     </div>
                 </body>
