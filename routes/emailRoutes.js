@@ -30,10 +30,10 @@ function buildSubmissionReceivedEmail(payload) {
   const submissionTitle = asString(payload.submissionTitle);
   const customMessage = asString(
     payload.message,
-    'Votre soumission a bien ete recue. Nous allons commencer le traitement.'
+    'Votre soumission a bien été reçue. Nous allons commencer le traitement.'
   );
 
-  const subject = `Chaina Smart - Soumission recue (${submissionTitle})`;
+  const subject = `Chaina Smart - Soumission reçue (${submissionTitle})`;
   const text = [
     `Bonjour ${firstName},`,
     '',
@@ -48,7 +48,7 @@ function buildSubmissionReceivedEmail(payload) {
 
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;">
-      <h2 style="margin:0 0 12px 0;color:#1d4ed8;">Soumission recue</h2>
+      <h2 style="margin:0 0 12px 0;color:#1d4ed8;">Soumission reçue</h2>
       <p>Bonjour <strong>${escapeHtml(firstName)}</strong>,</p>
       <p>${escapeHtml(customMessage)}</p>
       <div style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
@@ -68,11 +68,11 @@ function buildDocumentsReadyEmail(payload) {
   const submissionTitle = asString(payload.submissionTitle);
   const customMessage = asString(
     payload.message,
-    'Vos documents sont prets. Consultez votre soumission.'
+    'Vos documents sont prêts. Consultez votre soumission.'
   );
   const labels = asStringArray(payload.deliverableLabels);
 
-  const subject = `Chaina Smart - Documents prets (${submissionTitle})`;
+  const subject = `Chaina Smart - Documents prêts (${submissionTitle})`;
   const labelsText = labels.length > 0 ? labels.map((label) => `- ${label}`).join('\n') : '- Livrable disponible';
   const labelsHtml = labels.length > 0
     ? labels.map((label) => `<li>${escapeHtml(label)}</li>`).join('')
@@ -95,7 +95,7 @@ function buildDocumentsReadyEmail(payload) {
 
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;">
-      <h2 style="margin:0 0 12px 0;color:#15803d;">Documents prets</h2>
+      <h2 style="margin:0 0 12px 0;color:#15803d;">Documents prêts</h2>
       <p>Bonjour <strong>${escapeHtml(firstName)}</strong>,</p>
       <p>${escapeHtml(customMessage)}</p>
       <div style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
@@ -113,14 +113,14 @@ function buildDocumentsReadyEmail(payload) {
 
 function mapFraisStatusLabel(status) {
   const value = asString(status).toLowerCase();
-  if (value === 'paye') return 'Paye';
+  if (value === 'paye') return 'Payé';
   return 'En attente';
 }
 
 function mapDemandeStatusLabel(status) {
   const value = asString(status).toLowerCase();
-  if (value === 'validee') return 'Validee';
-  if (value === 'rejetee') return 'Rejetee';
+  if (value === 'validee') return 'Validée';
+  if (value === 'rejetee') return 'Rejetée';
   return 'En cours';
 }
 
@@ -146,10 +146,10 @@ function buildBourseStatusChangedEmail(payload) {
   const billId = asString(payload.paymentBillId, '-');
   const customMessage = asString(
     payload.message,
-    'Le statut de votre demande de bourse Ecole 241 Kids a ete mis a jour.'
+    'Le statut de votre demande de bourse Ecole 241 Kids a été mis à jour.'
   );
 
-  const subject = `Ecole 241 Kids - Mise a jour dossier bourse (${requestId})`;
+  const subject = `Ecole 241 Kids - Mise à jour dossier bourse (${requestId})`;
 
   const text = [
     `Bonjour ${parentName},`,
@@ -157,37 +157,37 @@ function buildBourseStatusChangedEmail(payload) {
     customMessage,
     '',
     `Dossier ID: ${requestId}`,
-    `Eleve: ${studentName}`,
+    `Élève: ${studentName}`,
     `Classe: ${classeActuelle}`,
     `Frais de dossier: ${fraisStatus}`,
     `Statut demande: ${demandeStatus}`,
-    `Reference paiement: ${referenceBillet}`,
+    `Référence paiement: ${referenceBillet}`,
     `Bill ID: ${billId}`,
     '',
     'Cordialement,',
-    'Equipe Ecole 241 Kids'
+    'Équipe Ecole 241 Kids'
   ].join('\n');
 
   const html = `
     <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc;">
       <div style="background:#1CBA7D;color:#ffffff;padding:16px 18px;border-radius:10px 10px 0 0;">
-        <h2 style="margin:0;font-size:20px;">Mise a jour de votre dossier de bourse</h2>
+        <h2 style="margin:0;font-size:20px;">Mise à jour de votre dossier de bourse</h2>
       </div>
       <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;padding:18px;">
       <p>Bonjour <strong>${escapeHtml(parentName)}</strong>,</p>
       <p>${escapeHtml(customMessage)}</p>
       <div style="margin:16px 0;padding:12px;border:1px solid #DA8D6F;border-radius:8px;background:#fff7f3;">
         <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Dossier ID:</strong> ${escapeHtml(requestId)}</p>
-        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Eleve:</strong> ${escapeHtml(studentName)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Élève:</strong> ${escapeHtml(studentName)}</p>
         <p style="margin:0;"><strong style="color:#3CA3C6;">Classe:</strong> ${escapeHtml(classeActuelle)}</p>
       </div>
       <div style="margin:16px 0;padding:12px;border:1px solid #C18708;border-radius:8px;background:#fffbeb;">
         <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Frais de dossier:</strong> ${escapeHtml(fraisStatus)}</p>
         <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Statut demande:</strong> ${escapeHtml(demandeStatus)}</p>
-        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Reference paiement:</strong> ${escapeHtml(referenceBillet)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Référence paiement:</strong> ${escapeHtml(referenceBillet)}</p>
         <p style="margin:0;"><strong style="color:#C18708;">Bill ID:</strong> ${escapeHtml(billId)}</p>
       </div>
-      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Equipe Ecole 241 Kids</strong></p>
+      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Équipe Ecole 241 Kids</strong></p>
       </div>
     </div>
   `;
@@ -205,47 +205,47 @@ function buildBourseStatusChangedAdminEmail(payload) {
   const referenceBillet = asString(payload.paymentReferenceBillet, '-');
   const billId = asString(payload.paymentBillId, '-');
 
-  const subject = `Admin - Mise a jour dossier bourse (${requestId})`;
+  const subject = `Admin - Mise à jour dossier bourse (${requestId})`;
 
   const text = [
     'Bonjour Admin,',
     '',
-    'Une mise a jour du dossier de bourse a ete effectuee.',
+    'Une mise à jour du dossier de bourse a été effectuée.',
     '',
     `Dossier ID: ${requestId}`,
     `Parent: ${parentName}`,
-    `Eleve: ${studentName}`,
+    `Élève: ${studentName}`,
     `Classe: ${classeActuelle}`,
     `Frais de dossier: ${fraisStatus}`,
     `Statut demande: ${demandeStatus}`,
-    `Reference paiement: ${referenceBillet}`,
+    `Référence paiement: ${referenceBillet}`,
     `Bill ID: ${billId}`,
     '',
     'Cordialement,',
-    'Systeme Ecole 241 Kids'
+    'Système Ecole 241 Kids'
   ].join('\n');
 
   const html = `
     <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc;">
       <div style="background:#3CA3C6;color:#ffffff;padding:16px 18px;border-radius:10px 10px 0 0;">
-        <h2 style="margin:0;font-size:20px;">Notification admin - Dossier bourse mis a jour</h2>
+        <h2 style="margin:0;font-size:20px;">Notification admin - Dossier bourse mis à jour</h2>
       </div>
       <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;padding:18px;">
       <p>Bonjour <strong>Admin</strong>,</p>
-      <p>Une mise a jour du dossier de bourse a ete effectuee.</p>
+      <p>Une mise à jour du dossier de bourse a été effectuée.</p>
       <div style="margin:16px 0;padding:12px;border:1px solid #DA8D6F;border-radius:8px;background:#fff7f3;">
         <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Dossier ID:</strong> ${escapeHtml(requestId)}</p>
         <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Parent:</strong> ${escapeHtml(parentName)}</p>
-        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Eleve:</strong> ${escapeHtml(studentName)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Élève:</strong> ${escapeHtml(studentName)}</p>
         <p style="margin:0;"><strong style="color:#3CA3C6;">Classe:</strong> ${escapeHtml(classeActuelle)}</p>
       </div>
       <div style="margin:16px 0;padding:12px;border:1px solid #C18708;border-radius:8px;background:#fffbeb;">
         <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Frais de dossier:</strong> ${escapeHtml(fraisStatus)}</p>
         <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Statut demande:</strong> ${escapeHtml(demandeStatus)}</p>
-        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Reference paiement:</strong> ${escapeHtml(referenceBillet)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Référence paiement:</strong> ${escapeHtml(referenceBillet)}</p>
         <p style="margin:0;"><strong style="color:#C18708;">Bill ID:</strong> ${escapeHtml(billId)}</p>
       </div>
-      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Systeme Ecole 241 Kids</strong></p>
+      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Système Ecole 241 Kids</strong></p>
       </div>
     </div>
   `;
@@ -259,14 +259,14 @@ async function sendAndRespond(res, emailPayload) {
   if (result.success) {
     return res.json({
       success: true,
-      message: 'Email envoye avec succes',
+      message: 'Email envoyé avec succès',
       messageId: result.messageId || null
     });
   }
 
   return res.status(500).json({
     success: false,
-    error: result.error || 'Echec envoi email'
+    error: result.error || 'Échec envoi email'
   });
 }
 
@@ -358,7 +358,7 @@ router.post('/bourse-status-changed', async (req, res) => {
     if (!parentResult.success) {
       return res.status(500).json({
         success: false,
-        error: parentResult.error || 'Echec envoi email parent'
+        error: parentResult.error || 'Échec envoi email parent'
       });
     }
 
@@ -376,14 +376,14 @@ router.post('/bourse-status-changed', async (req, res) => {
       if (adminResult.success) {
         adminNotified = true;
       } else {
-        adminError = adminResult.error || 'Echec envoi notification admin';
-        console.error('❌ Notification admin non envoyee:', adminError);
+        adminError = adminResult.error || 'Échec envoi notification admin';
+        console.error('❌ Notification admin non envoyée:', adminError);
       }
     }
 
     return res.json({
       success: true,
-      message: 'Email envoye avec succes',
+      message: 'Email envoyé avec succès',
       messageId: parentResult.messageId || null,
       adminNotification: {
         sent: adminNotified,
