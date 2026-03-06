@@ -111,6 +111,148 @@ function buildDocumentsReadyEmail(payload) {
   return { subject, text, html };
 }
 
+function mapFraisStatusLabel(status) {
+  const value = asString(status).toLowerCase();
+  if (value === 'paye') return 'Paye';
+  return 'En attente';
+}
+
+function mapDemandeStatusLabel(status) {
+  const value = asString(status).toLowerCase();
+  if (value === 'validee') return 'Validee';
+  if (value === 'rejetee') return 'Rejetee';
+  return 'En cours';
+}
+
+function getAdminRecipients() {
+  const candidates = [
+    asString(process.env.ADMIN_EMAIL),
+    asString(process.env.ADMIN_EMAIL1),
+    asString(process.env.EMAIL_USER)
+  ];
+
+  const unique = [...new Set(candidates.filter((email) => email.length > 0))];
+  return unique;
+}
+
+function buildBourseStatusChangedEmail(payload) {
+  const parentName = asString(payload.parentName, 'Parent');
+  const requestId = asString(payload.requestId);
+  const studentName = asString(payload.studentName, 'Eleve');
+  const classeActuelle = asString(payload.classeActuelle, '-');
+  const fraisStatus = mapFraisStatusLabel(payload.fraisDossierStatus);
+  const demandeStatus = mapDemandeStatusLabel(payload.demandeBourseStatus);
+  const referenceBillet = asString(payload.paymentReferenceBillet, '-');
+  const billId = asString(payload.paymentBillId, '-');
+  const customMessage = asString(
+    payload.message,
+    'Le statut de votre demande de bourse Ecole 241 Kids a ete mis a jour.'
+  );
+
+  const subject = `Ecole 241 Kids - Mise a jour dossier bourse (${requestId})`;
+
+  const text = [
+    `Bonjour ${parentName},`,
+    '',
+    customMessage,
+    '',
+    `Dossier ID: ${requestId}`,
+    `Eleve: ${studentName}`,
+    `Classe: ${classeActuelle}`,
+    `Frais de dossier: ${fraisStatus}`,
+    `Statut demande: ${demandeStatus}`,
+    `Reference paiement: ${referenceBillet}`,
+    `Bill ID: ${billId}`,
+    '',
+    'Cordialement,',
+    'Equipe Ecole 241 Kids'
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc;">
+      <div style="background:#1CBA7D;color:#ffffff;padding:16px 18px;border-radius:10px 10px 0 0;">
+        <h2 style="margin:0;font-size:20px;">Mise a jour de votre dossier de bourse</h2>
+      </div>
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;padding:18px;">
+      <p>Bonjour <strong>${escapeHtml(parentName)}</strong>,</p>
+      <p>${escapeHtml(customMessage)}</p>
+      <div style="margin:16px 0;padding:12px;border:1px solid #DA8D6F;border-radius:8px;background:#fff7f3;">
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Dossier ID:</strong> ${escapeHtml(requestId)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Eleve:</strong> ${escapeHtml(studentName)}</p>
+        <p style="margin:0;"><strong style="color:#3CA3C6;">Classe:</strong> ${escapeHtml(classeActuelle)}</p>
+      </div>
+      <div style="margin:16px 0;padding:12px;border:1px solid #C18708;border-radius:8px;background:#fffbeb;">
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Frais de dossier:</strong> ${escapeHtml(fraisStatus)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Statut demande:</strong> ${escapeHtml(demandeStatus)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Reference paiement:</strong> ${escapeHtml(referenceBillet)}</p>
+        <p style="margin:0;"><strong style="color:#C18708;">Bill ID:</strong> ${escapeHtml(billId)}</p>
+      </div>
+      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Equipe Ecole 241 Kids</strong></p>
+      </div>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
+function buildBourseStatusChangedAdminEmail(payload) {
+  const parentName = asString(payload.parentName, 'Parent');
+  const requestId = asString(payload.requestId);
+  const studentName = asString(payload.studentName, 'Eleve');
+  const classeActuelle = asString(payload.classeActuelle, '-');
+  const fraisStatus = mapFraisStatusLabel(payload.fraisDossierStatus);
+  const demandeStatus = mapDemandeStatusLabel(payload.demandeBourseStatus);
+  const referenceBillet = asString(payload.paymentReferenceBillet, '-');
+  const billId = asString(payload.paymentBillId, '-');
+
+  const subject = `Admin - Mise a jour dossier bourse (${requestId})`;
+
+  const text = [
+    'Bonjour Admin,',
+    '',
+    'Une mise a jour du dossier de bourse a ete effectuee.',
+    '',
+    `Dossier ID: ${requestId}`,
+    `Parent: ${parentName}`,
+    `Eleve: ${studentName}`,
+    `Classe: ${classeActuelle}`,
+    `Frais de dossier: ${fraisStatus}`,
+    `Statut demande: ${demandeStatus}`,
+    `Reference paiement: ${referenceBillet}`,
+    `Bill ID: ${billId}`,
+    '',
+    'Cordialement,',
+    'Systeme Ecole 241 Kids'
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc;">
+      <div style="background:#3CA3C6;color:#ffffff;padding:16px 18px;border-radius:10px 10px 0 0;">
+        <h2 style="margin:0;font-size:20px;">Notification admin - Dossier bourse mis a jour</h2>
+      </div>
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;padding:18px;">
+      <p>Bonjour <strong>Admin</strong>,</p>
+      <p>Une mise a jour du dossier de bourse a ete effectuee.</p>
+      <div style="margin:16px 0;padding:12px;border:1px solid #DA8D6F;border-radius:8px;background:#fff7f3;">
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Dossier ID:</strong> ${escapeHtml(requestId)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Parent:</strong> ${escapeHtml(parentName)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#3CA3C6;">Eleve:</strong> ${escapeHtml(studentName)}</p>
+        <p style="margin:0;"><strong style="color:#3CA3C6;">Classe:</strong> ${escapeHtml(classeActuelle)}</p>
+      </div>
+      <div style="margin:16px 0;padding:12px;border:1px solid #C18708;border-radius:8px;background:#fffbeb;">
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Frais de dossier:</strong> ${escapeHtml(fraisStatus)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Statut demande:</strong> ${escapeHtml(demandeStatus)}</p>
+        <p style="margin:0 0 6px 0;"><strong style="color:#C18708;">Reference paiement:</strong> ${escapeHtml(referenceBillet)}</p>
+        <p style="margin:0;"><strong style="color:#C18708;">Bill ID:</strong> ${escapeHtml(billId)}</p>
+      </div>
+      <p style="margin-top:18px;">Cordialement,<br/><strong style="color:#1CBA7D;">Systeme Ecole 241 Kids</strong></p>
+      </div>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
 async function sendAndRespond(res, emailPayload) {
   const result = await sendEmail(emailPayload);
 
@@ -189,6 +331,66 @@ router.post('/documents-ready', async (req, res) => {
 
     const template = buildDocumentsReadyEmail(req.body);
     return await sendAndRespond(res, { to, ...template });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Erreur serveur email'
+    });
+  }
+});
+
+router.post('/bourse-status-changed', async (req, res) => {
+  try {
+    const to = asString(req.body.to);
+    const requestId = asString(req.body.requestId);
+    const studentName = asString(req.body.studentName);
+
+    if (!to || !requestId || !studentName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Champs requis: to, requestId, studentName'
+      });
+    }
+
+    const template = buildBourseStatusChangedEmail(req.body);
+    const parentResult = await sendEmail({ to, ...template });
+
+    if (!parentResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: parentResult.error || 'Echec envoi email parent'
+      });
+    }
+
+    const adminRecipients = getAdminRecipients();
+    const adminTemplate = buildBourseStatusChangedAdminEmail(req.body);
+
+    let adminNotified = false;
+    let adminError = null;
+
+    if (adminRecipients.length > 0) {
+      const adminTo = adminRecipients.join(', ');
+      console.log('📧 Notification admin dossier bourse ->', adminTo);
+      const adminResult = await sendEmail({ to: adminTo, ...adminTemplate });
+
+      if (adminResult.success) {
+        adminNotified = true;
+      } else {
+        adminError = adminResult.error || 'Echec envoi notification admin';
+        console.error('❌ Notification admin non envoyee:', adminError);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Email envoye avec succes',
+      messageId: parentResult.messageId || null,
+      adminNotification: {
+        sent: adminNotified,
+        recipients: adminRecipients,
+        error: adminError
+      }
+    });
   } catch (error) {
     return res.status(500).json({
       success: false,

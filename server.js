@@ -36,6 +36,8 @@ const corsOrigins = [
     'https://shaina-smart-app.afup-tech.com',
     'https://africa-brocante.vercel.app',
     'https://rotary-port-gentil-65th-anniversary.vercel.app',
+    'https://www.portaileventogoouelabs.online',
+    'https://portaileventogoouelabs.online',
     'https://simu.billing-easy.net',
     'https://lab.billing-easy.net'
 ];

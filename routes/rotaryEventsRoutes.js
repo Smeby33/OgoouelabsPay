@@ -799,6 +799,8 @@ router.post('/webhook', async (req, res) => {
                     
                     if (qrCodeBase64) {
                         console.log('✅ QR code généré avec succès');
+                        console.log('🔲 QR Code (longueur:', qrCodeBase64.length, 'caractères)');
+                        console.log('🔲 QR Code (aperçu):', qrCodeBase64.substring(0, 100) + '...');
                         
                         // Mettre à jour le billet avec l'URL du QR code
                         await db.query(
@@ -900,6 +902,8 @@ router.get('/tickets/:reference', async (req, res) => {
                 
                 if (qrCodeBase64) {
                     console.log('✅ QR code généré avec succès');
+                    console.log('🔲 QR Code (longueur:', qrCodeBase64.length, 'caractères)');
+                    console.log('🔲 QR Code (aperçu):', qrCodeBase64.substring(0, 100) + '...');
                     
                     // Mettre à jour le billet avec l'URL du QR code
                     await db.query(
@@ -945,7 +949,21 @@ router.get('/tickets/:reference', async (req, res) => {
             console.log('⏳ Billet en attente de paiement');
         }
         
-        res.json({ success: true, ticket: billet });
+        // Préparer la réponse avec toutes les informations incluant le QR code
+        const response = {
+            success: true,
+            ticket: billet,
+            qr_code: billet.qr_code_url || null, // QR code explicitement inclus
+            has_qr_code: !!billet.qr_code_url,
+            payment_status: billet.statut_paiement
+        };
+        
+        console.log('📤 Envoi de la réponse avec QR code:', response.has_qr_code ? 'Oui' : 'Non');
+        if (response.qr_code) {
+            console.log('🔲 QR Code complet envoyé (longueur:', response.qr_code.length, 'caractères)');
+            console.log('🔲 QR Code (aperçu):', response.qr_code.substring(0, 100) + '...');
+        }
+        res.json(response);
         
     } catch (err) {
         console.error('❌ Erreur récupération billet:', err);
@@ -1144,6 +1162,8 @@ router.post('/tickets/:reference/resend-email', async (req, res) => {
             qrCodeBase64 = await generateQRCodeBase64(qrData);
             
             if (qrCodeBase64) {
+                console.log('🔲 QR Code généré (longueur:', qrCodeBase64.length, 'caractères)');
+                console.log('🔲 QR Code (aperçu):', qrCodeBase64.substring(0, 100) + '...');
                 // Enregistrer le QR code
                 await db.query(
                     'UPDATE rotary_billets SET qr_code_url = ? WHERE id = ?',
@@ -1153,6 +1173,9 @@ router.post('/tickets/:reference/resend-email', async (req, res) => {
             } else {
                 return res.status(500).json({ error: 'Échec génération QR code' });
             }
+        } else {
+            console.log('🔲 QR Code existant récupéré (longueur:', qrCodeBase64.length, 'caractères)');
+            console.log('🔲 QR Code (aperçu):', qrCodeBase64.substring(0, 100) + '...');
         }
         
         // Envoyer l'email
