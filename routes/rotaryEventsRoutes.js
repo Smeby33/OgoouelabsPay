@@ -21,12 +21,12 @@ router.use((req, res, next) => {
 });
 
 //==================== CONFIGURATION EBILLING ====================
-const EBILLING_USERNAME = process.env.EBILLING_USERNAME || 'ogoouelabs';
-const EBILLING_SHARED_KEY = process.env.EBILLING_SHARED_KEY || '17c6f141-0478-48d8-9e56-198c5e79ef45';
-const EBILLING_URL = 'https://stg.billing-easy.com/api/v1/merchant/e_bills';
-// const EBILLING_USERNAME ='afup';
-// const EBILLING_SHARED_KEY ='b3b8814e-4639-46a1-97c3-bf37401dc54b';
-// const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
+// const EBILLING_USERNAME = process.env.EBILLING_USERNAME || 'ogoouelabs';
+// const EBILLING_SHARED_KEY = process.env.EBILLING_SHARED_KEY || '17c6f141-0478-48d8-9e56-198c5e79ef45';
+// const EBILLING_URL = 'https://stg.billing-easy.com/api/v1/merchant/e_bills';
+const EBILLING_USERNAME ='afup';
+const EBILLING_SHARED_KEY ='b3b8814e-4639-46a1-97c3-bf37401dc54b';
+const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
 const EB_CALLBACK_URL = process.env.EB_CALLBACK_URL || 'https://spy86grsmp.us-east-1.awsapprunner.com/rotary/webhook';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://rotary-port-gentil-65th-anniversary.vercel.app';
 
@@ -59,6 +59,52 @@ function generatePaymentRef() {
     return `REF-ROTARY-${random}`;
 }
 
+function getPurchaseEmailContext(billetData = {}, eventData = {}) {
+    const source = `${billetData.nom_categorie || ''} ${eventData.titre || ''}`.toLowerCase();
+    const isBourse = source.includes('bourse');
+    const isInscriptionMois = source.includes('inscription') && source.includes('mois');
+
+    if (isBourse) {
+        return {
+            type: 'bourse',
+            subject: `✅ Confirmation de votre demande de bourse - ${eventData.titre}`,
+            headerTitle: '🎓 Demande de bourse confirmée',
+            headerSubtitle: 'Votre demande a bien été enregistrée',
+            introText: 'Nous confirmons la prise en compte de votre demande de bourse pour :',
+            quantityUnit: 'demande(s)',
+            showInvoice: false
+        };
+    }
+
+    if (isInscriptionMois) {
+        return {
+            type: 'inscription_mois',
+            subject: `✅ Confirmation d'inscription et facture - ${eventData.titre}`,
+            headerTitle: '🧾 Inscription confirmée',
+            headerSubtitle: 'Votre facture est disponible ci-dessous',
+            introText: 'Nous confirmons votre inscription. Voici le récapitulatif de votre facture :',
+            quantityUnit: 'mois',
+            showInvoice: true
+        };
+    }
+
+    return {
+        type: 'recu',
+        subject: `✅ Votre reçu pour ${eventData.titre}`,
+        headerTitle: '🎉 Paiement confirmé !',
+        headerSubtitle: 'Votre reçu est prêt',
+        introText: 'Nous avons le plaisir de confirmer votre inscription pour :',
+        quantityUnit: 'place(s)',
+        showInvoice: false
+    };
+}
+
+function formatCurrency(amount, currencyCode) {
+    const value = Number(amount || 0);
+    const currency = currencyCode || 'XAF';
+    return `${value.toLocaleString('fr-FR')} ${currency}`;
+}
+
 // Fonction pour générer un QR code en base64
 async function generateQRCodeBase64(data) {
     try {
@@ -81,6 +127,7 @@ async function sendAdminNotification(type, billetData, eventData) {
         const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
         const adminEmail2 = process.env.ADMIN_EMAIL1;
         const adminEmails = adminEmail2 ? `${adminEmail}, ${adminEmail2}` : adminEmail;
+        const emailContext = getPurchaseEmailContext(billetData, eventData);
         
         let subject = '';
         let message = '';
@@ -99,8 +146,8 @@ async function sendAdminNotification(type, billetData, eventData) {
                             <p><strong>📱 Téléphone :</strong> ${billetData.telephone || 'Non renseigné'}</p>
                             <p><strong>🎫 Référence :</strong> ${billetData.reference_billet}</p>
                             <p><strong>🎟️ Catégorie :</strong> ${billetData.nom_categorie}</p>
-                            <p><strong>👥 Quantité :</strong> ${billetData.quantite} place(s)</p>
-                            <p><strong>💰 Montant :</strong> ${billetData.montant_total.toLocaleString('fr-FR')} ${billetData.currency_code}</p>
+                            <p><strong>👥 Quantité :</strong> ${billetData.quantite} ${emailContext.quantityUnit}</p>
+                            <p><strong>💰 Montant :</strong> ${formatCurrency(billetData.montant_total, billetData.currency_code)}</p>
                         </div>
                         
                         <div style="background: #FFF3CD; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -177,13 +224,45 @@ async function sendAdminNotification(type, billetData, eventData) {
 async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
     try {
         console.log('📧 Préparation email pour:', billetData.email);
+
+        const emailContext = getPurchaseEmailContext(billetData, eventData);
+        const quantity = Number(billetData.quantite || 0);
+        const unitPrice = quantity > 0 ? Number(billetData.montant_total || 0) / quantity : Number(billetData.montant_total || 0);
+        const invoiceReference = `FCT-${billetData.reference_billet || generateTicketRef()}`;
+        const invoiceHtml = emailContext.showInvoice
+            ? `
+                            <div class="ticket-info">
+                                <h3 style="color: #01579B; margin-top: 0;">🧾 Facture</h3>
+                                <div class="info-row">
+                                    <span class="info-label">Référence facture :</span>
+                                    <span><strong>${invoiceReference}</strong></span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Ligne :</span>
+                                    <span>Inscription (${billetData.nom_categorie || 'Catégorie standard'})</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Quantité :</span>
+                                    <span>${billetData.quantite} ${emailContext.quantityUnit}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Prix unitaire :</span>
+                                    <span>${formatCurrency(unitPrice, billetData.currency_code)}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Total TTC :</span>
+                                    <span><strong>${formatCurrency(billetData.montant_total, billetData.currency_code)}</strong></span>
+                                </div>
+                            </div>
+            `
+            : '';
         
         const qrCodeImage = qrCodeBase64.replace(/^data:image\/png;base64,/, '');
         
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: billetData.email,
-            subject: `✅ Votre reçu pour ${eventData.titre}`,
+            subject: emailContext.subject,
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -205,14 +284,14 @@ async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>🎉 Paiement Confirmé !</h1>
-                            <p>Votre reçu est prêt</p>
+                            <h1>${emailContext.headerTitle}</h1>
+                            <p>${emailContext.headerSubtitle}</p>
                         </div>
                         
                         <div class="content">
                             <p>Bonjour <strong>${billetData.prenom} ${billetData.nom}</strong>,</p>
                             
-                            <p>Nous avons le plaisir de confirmer votre inscription pour :</p>
+                            <p>${emailContext.introText}</p>
                             
                             <div class="ticket-info">
                                 <h2 style="color: #01579B; margin-top: 0;">${eventData.titre}</h2>
@@ -246,14 +325,16 @@ async function sendTicketEmail(billetData, eventData, qrCodeBase64) {
                                 
                                 <div class="info-row">
                                     <span class="info-label">👥 Quantité :</span>
-                                    <span>${billetData.quantite} place(s)</span>
+                                    <span>${billetData.quantite} ${emailContext.quantityUnit}</span>
                                 </div>
                                 
                                 <div class="info-row">
                                     <span class="info-label">💰 Montant payé :</span>
-                                    <span><strong>${billetData.montant_total.toLocaleString('fr-FR')} ${billetData.currency_code}</strong></span>
+                                    <span><strong>${formatCurrency(billetData.montant_total, billetData.currency_code)}</strong></span>
                                 </div>
                             </div>
+
+                            ${invoiceHtml}
                             
                             <div class="qr-code">
                                 <h3 style="color: #01579B;">Votre QR Code d'Accès</h3>
