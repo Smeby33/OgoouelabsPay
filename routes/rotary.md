@@ -620,3 +620,104 @@ const EBILLING_SHARED_KEY ='b3b8814e-4639-46a1-97c3-bf37401dc54b';
 const EBILLING_URL = 'https://lab.billing-easy.net/api/v1/merchant/e_bills';
 
   staging.billing-easy.net
+
+
+
+  diff --git a/c:\Users\PC\Desktop\MY WORKER\Portail evenementiel\sql/inscription_ecole241_seed.sql b/c:\Users\PC\Desktop\MY WORKER\Portail evenementiel\sql/inscription_ecole241_seed.sql
+new file mode 100644
+--- /dev/null
++++ b/c:\Users\PC\Desktop\MY WORKER\Portail evenementiel\sql/inscription_ecole241_seed.sql
+@@ -0,0 +1,93 @@
++-- Seed SQL: Evenement + categorie billet pour Inscription Ecole 241 Kids
++-- Base cible: u929681960_afuppay
++-- Route backend cible: rotaryEventsRoutes.js -> POST /tickets/create
++-- IDs utilises par le frontend:
++--   EV-ECOLE241-KIDS-INSCRIPTION-2026
++--   CAT-ECOLE241-KIDS-PROGRAMME-COMPLET
++
++START TRANSACTION;
++
+-- 1) Evenement payant dedie aux inscriptions programme complet
+INSERT INTO rotary_evenements (
+  id,
+  titre,
+  description,
+  type_evenement,
+  date_evenement,
+  date_fin_evenement,
+  lieu,
+  adresse_complete,
+  capacite_max,
+  image_url,
+  organisateur_nom,
+  organisateur_email,
+  organisateur_telephone,
+  statut,
+  date_limite_inscription,
+  is_payant,
+  created_at,
+  updated_at,
+  created_by_user_id
+)
+SELECT
+  'EV-ECOLE241-KIDS-INSCRIPTION-2026',
+  'Inscription Programme Complet - Ecole 241 Kids',
+  'Inscription au programme complet Ecole 241 Kids (frais inscription + mensualites).',
+  'autres',
+  '2099-12-31 23:59:59',
+  NULL,
+  'En ligne',
+  'Service digital',
+  NULL,
+  NULL,
+  'Ecole 241 Kids',
+  NULL,
+  NULL,
+  'publie',
+  NULL,
+  1,
+  NOW(),
+  NOW(),
+  'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM rotary_evenements WHERE id = 'EV-ECOLE241-KIDS-INSCRIPTION-2026'
+);
+
+-- 2) Categorie billet programme complet (prix indicatif mensuel)
+INSERT INTO rotary_billets_categories (
+  id,
+  evenement_id,
+  nom_categorie,
+  description,
+  prix_unitaire,
+  currency_code,
+  quantite_disponible,
+  quantite_vendue,
+  ordre_affichage,
+  is_active,
+  couleur_badge,
+  avantages,
+  created_at,
+  updated_at
+)
+SELECT
+  'CAT-ECOLE241-KIDS-PROGRAMME-COMPLET',
+  'EV-ECOLE241-KIDS-INSCRIPTION-2026',
+  'Programme complet',
+  'Formule complete 6e a Terminale (50000 FCFA / mois + frais inscription 20000 FCFA)',
+  50000,
+  'XAF',
+  NULL,
+  0,
+  1,
+  1,
+  'green',
+  'Programme officiel, supports numeriques, projets pratiques, suivi individualise',
+  NOW(),
+  NOW()
+WHERE NOT EXISTS (
+  SELECT 1 FROM rotary_billets_categories WHERE id = 'CAT-ECOLE241-KIDS-PROGRAMME-COMPLET'
+);
+
+COMMIT;
+
